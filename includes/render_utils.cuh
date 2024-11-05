@@ -54,7 +54,7 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
     torch::cuda::synchronize();
 
     // Rasterize visible Gaussians to image, obtain their radii (on screen).
-    auto [rendererd_image, radii] = rasterizer.forward(
+    auto [rendererd_image, radii, rendererd_depth, rendererd_alpha] = rasterizer.forward(
         means3D,
         means2D,
         opacity,
@@ -67,5 +67,5 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
     // Apply visibility filter to remove occluded Gaussians.
     // TODO: I think there is no real use for means2D, isn't it?
     // render, viewspace_points, visibility_filter, radii
-    return {rendererd_image, means2D, radii > 0, radii};
+    return {rendererd_image, rendererd_depth, rendererd_alpha, means2D, radii > 0, radii};
 }

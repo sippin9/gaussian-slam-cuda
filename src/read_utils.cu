@@ -322,6 +322,40 @@ PointCloud read_point3D_binary(std::filesystem::path file_path) {
     return point_cloud;
 }
 
+/*
+std::vector<CameraInfo> config_cameras() {
+    std::vector<CameraInfo> camera_infos(1);
+    CameraInfo camera_info;
+    float f_x;
+    float f_y;
+    int i_width;
+    int i_height;
+    int channels;
+    //unsigned char* img_data;
+
+    Eigen::Matrix3f R = Eigen::Matrix3f::Identity();; // rotation  matrix
+    Eigen::Vector3f T = Eigen::Vector3f::Zero(); // translation vector
+
+    camera_info._R = R;
+    camera_info._T = T;
+    camera_info._img_w = i_width;
+    camera_info._img_h = i_height;
+    camera_info._channels = channels;
+
+    //camera_info._image_name = image->_name;
+    //camera_info._image_path = file_path / image->_name;
+    //auto [img_data, width, height, channels] = read_image(file_path / image->_name, resolution);
+
+    const float focal_length_x = f_x;
+    const float focal_length_y = f_y;
+    camera_info->_fov_x = focal2fov(focal_length_x, camera_info._width);
+    camera_info->_fov_y = focal2fov(focal_length_y, camera_info._height);
+
+
+    return camera_infos;
+}
+*/
+
 std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_path,
                                             const std::unordered_map<uint32_t, CameraInfo>& cameras,
                                             const std::vector<Image>& images,

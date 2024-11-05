@@ -67,7 +67,8 @@ public:
         // TODO: should it be this way? Bug?
         camera_center = camera_center.contiguous();
 
-        auto [num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer] = RasterizeGaussiansCUDA(
+        //Michael: Add out_depth, out_alpha for new rasterizer
+        auto [num_rendered, color, out_depth, out_alpha, radii, geomBuffer, binningBuffer, imgBuffer] = RasterizeGaussiansCUDA(
             bg,
             means3D,
             colors_precomp,
@@ -102,7 +103,7 @@ public:
         ctx->saved_data["sh_degree"] = sh_degree_val;
         ctx->saved_data["camera_center"] = camera_center;
         ctx->saved_data["prefiltered"] = prefiltered_val;
-        return {color, radii};
+        return {color, out_depth, out_alpha, radii};
     }
 
     static torch::autograd::tensor_list backward(torch::autograd::AutogradContext* ctx, torch::autograd::tensor_list grad_outputs) {
@@ -237,7 +238,7 @@ public:
         return visible;
     }
 
-    std::tuple<torch::Tensor, torch::Tensor> forward(torch::Tensor means3D,
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> forward(torch::Tensor means3D,
                                                      torch::Tensor means2D,
                                                      torch::Tensor opacities,
                                                      torch::Tensor shs = torch::Tensor(),
@@ -283,7 +284,8 @@ public:
             cov3D_precomp,
             raster_settings_);
 
-        return {result[0], result[1]};
+        //return: color, radii, out_depth, out_alpha
+        return {result[0], result[3], result[1], result[2]};
     }
 
 private:
