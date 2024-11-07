@@ -4,7 +4,7 @@
 
 #include "debug_utils.cuh"
 #include "rasterize_points.cuh"
-#include "serialization.h"
+//#include "serialization.h"
 
 #define WRITE_TEST_DATA
 #undef WRITE_TEST_DATA

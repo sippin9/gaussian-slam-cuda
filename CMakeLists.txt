@@ -57,7 +57,7 @@ set(HEADERS
         cuda_rasterizer/auxiliary.h
         cuda_rasterizer/rasterizer_impl.h
         cuda_rasterizer/rasterizer.h
-        cuda_rasterizer/serialization.h
+#        cuda_rasterizer/serialization.h
 )
 
 set(SOURCES
@@ -119,6 +119,8 @@ configure_build_type()
 find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Threads REQUIRED)
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
 
 # Check CUDA version
 if (CUDAToolkit_VERSION VERSION_LESS "11.7")
@@ -150,6 +152,7 @@ target_link_libraries(${PROJECT_NAME}
         glm
         Threads::Threads
         args
+        ${OpenCV_LIBS}
 )
 
 # --------------------------------------

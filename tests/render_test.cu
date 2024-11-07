@@ -2,7 +2,7 @@
 
 #include "debug_utils.cuh"
 #include "render_utils.cuh"
-#include "serialization.h"
+//#include "serialization.h"
 #include <gtest/gtest.h>
 #include <tuple>
 
@@ -29,6 +29,8 @@ protected:
     float tan_fovx;
     float tan_fovy;
     torch::Tensor dL_dout_color;
+    torch::Tensor dL_dout_depth;
+    torch::Tensor dL_dout_alpha;
     torch::Tensor sh;
     int degree;
     torch::Tensor campos;
@@ -51,7 +53,7 @@ TEST_F(RasterizeGaussiansTest, CompareOutputs) {
     auto [grad_means2D, grad_colors_precomp, grad_depths_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations] = RasterizeGaussiansBackwardCUDA(
         background, means3D, radii, colors, scales, rotations, scale_modifier,
         cov3D_precomp, viewmatrix, projmatrix, tan_fovx, tan_fovy,
-        dL_dout_color, sh, degree, campos, geomBuffer, R, binningBuffer,
+        dL_dout_color, dL_dout_depth, dL_dout_alpha, sh, degree, campos, geomBuffer, R, binningBuffer,
         imageBuffer, false);
 
     // return std::make_tuple(dL_dmeans2D, dL_dcolors, dL_dopacity, dL_dmeans3D, dL_dcov3D, dL_dsh, dL_dscales, dL_drotations);

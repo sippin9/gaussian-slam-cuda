@@ -10,7 +10,7 @@
 #include <cmath>
 #include <torch/torch.h>
 
-inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> render(GaussianModel& gaussianModel,
+inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> render(GaussianModel& gaussianModel,
                                                                                      torch::Tensor& bg_color,
                                                                                      float scaling_modifier = 1.0,
                                                                                      torch::Tensor override_color = torch::empty({})) {
