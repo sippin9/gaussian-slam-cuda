@@ -48,7 +48,7 @@ protected:
 };
 
 TEST_F(RasterizeGaussiansTest, CompareOutputs) {
-    auto [grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations] = RasterizeGaussiansBackwardCUDA(
+    auto [grad_means2D, grad_colors_precomp, grad_depths_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations] = RasterizeGaussiansBackwardCUDA(
         background, means3D, radii, colors, scales, rotations, scale_modifier,
         cov3D_precomp, viewmatrix, projmatrix, tan_fovx, tan_fovy,
         dL_dout_color, sh, degree, campos, geomBuffer, R, binningBuffer,

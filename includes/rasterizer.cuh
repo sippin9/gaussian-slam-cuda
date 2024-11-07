@@ -109,6 +109,8 @@ public:
     static torch::autograd::tensor_list backward(torch::autograd::AutogradContext* ctx, torch::autograd::tensor_list grad_outputs) {
         auto grad_out_color = grad_outputs[0];
         auto grad_out_radii = grad_outputs[1];
+        auto grad_out_depth = grad_outputs[2];
+        auto grad_out_alpha = grad_outputs[3];
 
         auto num_rendered = ctx->saved_data["num_rendered"].to<int>();
         auto saved = ctx->get_saved_variables();
@@ -147,7 +149,7 @@ public:
         auto camera_center_copy = ctx->saved_data["camera_center"].to<torch::Tensor>();
 #endif
 
-        auto [grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations] = RasterizeGaussiansBackwardCUDA(
+        auto [grad_means2D, grad_colors_precomp, grad_depths_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations] = RasterizeGaussiansBackwardCUDA(
             ctx->saved_data["background"].to<torch::Tensor>(),
             means3D,
             radii,
@@ -161,6 +163,8 @@ public:
             ctx->saved_data["tanfovx"].to<float>(),
             ctx->saved_data["tanfovy"].to<float>(),
             grad_out_color,
+            grad_out_depth,
+            grad_out_alpha,
             sh,
             ctx->saved_data["sh_degree"].to<int>(),
             ctx->saved_data["camera_center"].to<torch::Tensor>(),
@@ -201,16 +205,16 @@ public:
                          binningBuffer_copy,
                          imgBuffer_copy);
 #endif
-        // return gradients for all inputs, 19 in total. :D
+        // return gradients for all inputs, 19 in total. :D Michael:Use depths_precomp
         return {grad_means3D,
                 grad_means2D,
                 grad_sh,
                 grad_colors_precomp,
+                grad_depths_precomp,
                 grad_opacities,
                 grad_scales,
                 grad_rotations,
-                grad_cov3Ds_precomp,
-                torch::Tensor(), // from here placeholder, not used: #forwards args = #backwards args.
+                grad_cov3Ds_precomp, // from here placeholder, not used: #forwards args = #backwards args.
                 torch::Tensor(),
                 torch::Tensor(),
                 torch::Tensor(),

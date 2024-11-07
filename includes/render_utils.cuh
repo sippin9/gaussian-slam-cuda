@@ -10,26 +10,47 @@
 #include <cmath>
 #include <torch/torch.h>
 
-inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> render(Camera& viewpoint_camera,
-                                                                                     GaussianModel& gaussianModel,
+inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> render(GaussianModel& gaussianModel,
                                                                                      torch::Tensor& bg_color,
                                                                                      float scaling_modifier = 1.0,
                                                                                      torch::Tensor override_color = torch::empty({})) {
     // Ensure background tensor (bg_color) is on GPU!
     bg_color = bg_color.to(torch::kCUDA);
 
+    int w = 640;
+    int h = 480;
+    float fx = 517.3;
+    float fy = 516.5;
+    float cx = 318.6;
+    float cy = 255.3;
+    float near = 0.01;
+    float far = 100;
+
+    // Should get param from model for SLAM
+    auto w2c = torch::eye(4);
+    auto w2c_cuda = w2c.to(torch::kCUDA).to(torch::kFloat);
+    auto cam_center = torch::inverse(w2c_cuda).slice(/*dim=*/0, /*start=*/3, /*end=*/4);
+    auto viewmatrix = w2c_cuda.transpose(0, 1);
+    auto opengl_proj = torch::tensor({
+        {2 * fx / w, 0.0f, -(w - 2 * cx) / w, 0.0f},
+        {0.0f, 2 * fy / h, -(h - 2 * cy) / h, 0.0f},
+        {0.0f, 0.0f, far / (far - near), -(far * near) / (far - near)},
+        {0.0f, 0.0f, 1.0f, 0.0f}
+    }, torch::dtype(torch::kFloat32).device(torch::kCUDA)).transpose(0, 1);
+    auto full_proj_matrix = viewmatrix.unsqueeze(0).bmm(opengl_proj.unsqueeze(0)).squeeze(0);
+
     // Set up rasterization configuration
     GaussianRasterizationSettings raster_settings = {
-        .image_height = static_cast<int>(viewpoint_camera.Get_image_height()),
-        .image_width = static_cast<int>(viewpoint_camera.Get_image_width()),
-        .tanfovx = std::tan(viewpoint_camera.Get_FoVx() * 0.5f),
-        .tanfovy = std::tan(viewpoint_camera.Get_FoVy() * 0.5f),
+        .image_height = w,
+        .image_width = h,
+        .tanfovx = w / (2 * fx),
+        .tanfovy = h / (2 * fy),
         .bg = bg_color,
         .scale_modifier = scaling_modifier,
-        .viewmatrix = viewpoint_camera.Get_world_view_transform(),
-        .projmatrix = viewpoint_camera.Get_full_proj_transform(),
-        .sh_degree = gaussianModel.Get_active_sh_degree(),
-        .camera_center = viewpoint_camera.Get_camera_center(),
+        .viewmatrix = viewmatrix,
+        .projmatrix = full_proj_matrix,
+        .sh_degree = gaussianModel.Get_active_sh_degree(), //0 in SLAM?
+        .camera_center = cam_center,
         .prefiltered = false};
 
     GaussianRasterizer rasterizer = GaussianRasterizer(raster_settings);
@@ -67,5 +88,5 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
     // Apply visibility filter to remove occluded Gaussians.
     // TODO: I think there is no real use for means2D, isn't it?
     // render, viewspace_points, visibility_filter, radii
-    return {rendererd_image, rendererd_depth, rendererd_alpha, means2D, radii > 0, radii};
+    return {rendererd_image, means2D, radii > 0, radii, rendererd_depth, rendererd_alpha};
 }

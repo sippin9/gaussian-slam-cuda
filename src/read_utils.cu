@@ -322,6 +322,7 @@ PointCloud read_point3D_binary(std::filesystem::path file_path) {
     return point_cloud;
 }
 
+//Michael: Should Rewrite here to support TUM
 /*
 std::vector<CameraInfo> config_cameras() {
     std::vector<CameraInfo> camera_infos(1);
