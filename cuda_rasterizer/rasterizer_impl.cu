@@ -9,6 +9,7 @@
  * For inquiries contact  george.drettakis@inria.fr
  */
 
+#include <torch/extension.h>
 #include "rasterizer_impl.h"
 #include <iostream>
 #include <fstream>
@@ -394,6 +395,9 @@ void CudaRasterizer::Rasterizer::backward(
 	// opacity and RGB of Gaussians from per-pixel loss gradients.
 	// If we were given precomputed colors and not SHs, use them.
 	const float* color_ptr = (colors_precomp != nullptr) ? colors_precomp : geomState.rgb;
+	
+	AT_ERROR("Doing Here in Rasterizer!");
+	
 	CHECK_CUDA(BACKWARD::render(
 		tile_grid,
 		block,

@@ -11,7 +11,7 @@
 
 //Michael: Todo in SLAM: Add TUM support, modify related func: read_colmap_scene_info, config_cameras(from read_colmap_cameras), camera_info
 
-Scene::Scene(GaussianModel& gaussians, PointCloud& _point_cloud, const gs::param::ModelParameters& params) : _gaussians(gaussians),//返回的初始化后的高斯模型
+Scene::Scene(GaussianModel& gaussians, const gs::param::ModelParameters& params) : _gaussians(gaussians),//返回的初始化后的高斯模型
                                                                                    _params(params) //模型参数为输入参数
 {
     // Right now there is only support for colmap
@@ -35,5 +35,5 @@ Scene::Scene(GaussianModel& gaussians, PointCloud& _point_cloud, const gs::param
     // TODO: json camera dumping for debugging purpose at least
 
     // get the parameterr self.cameras.extent（从点云中初始化高斯模型）
-    _gaussians.Create_from_pcd(_point_cloud, _scene_infos->_nerf_norm_radius);
+    _gaussians.Create_from_pcd(_scene_infos->_point_cloud, _scene_infos->_nerf_norm_radius);
 }

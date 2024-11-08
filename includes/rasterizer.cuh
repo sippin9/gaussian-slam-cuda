@@ -107,10 +107,10 @@ public:
     }
 
     static torch::autograd::tensor_list backward(torch::autograd::AutogradContext* ctx, torch::autograd::tensor_list grad_outputs) {
-        auto grad_out_color = grad_outputs[0];
+        auto grad_out_color = grad_outputs[0].to<float>();
         auto grad_out_radii = grad_outputs[1];
-        auto grad_out_depth = grad_outputs[2];
-        auto grad_out_alpha = grad_outputs[3];
+        auto grad_out_depth = grad_outputs[2].to<float>();
+        auto grad_out_alpha = grad_outputs[3].to<float>();
 
         auto num_rendered = ctx->saved_data["num_rendered"].to<int>();
         auto saved = ctx->get_saved_variables();

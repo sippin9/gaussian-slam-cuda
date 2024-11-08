@@ -49,6 +49,8 @@ RasterizeGaussiansCUDA(
         AT_ERROR("means3D must have dimensions (num_points, 3)");
     }
 
+    //AT_ERROR("Doing Here!");
+
     const int P = means3D.size(0);
     const int H = image_height;
     const int W = image_width;
@@ -152,10 +154,9 @@ RasterizeGaussiansBackwardCUDA(
     torch::Tensor dL_dscales = torch::zeros({P, 3}, means3D.options());
     torch::Tensor dL_drotations = torch::zeros({P, 4}, means3D.options());
 
-    torch::Tensor accum_alphas = torch::zeros_like(dL_dout_color);
+    torch::Tensor accum_alphas = torch::zeros({H,W}, means3D.options());
 
     if (P != 0) {
-
         CudaRasterizer::Rasterizer::backward(P, degree, M, R,
                                              background.contiguous().data_ptr<float>(),
                                              W, H,
@@ -192,6 +193,7 @@ RasterizeGaussiansBackwardCUDA(
                                              debug);
     }
 
+    AT_ERROR("Doing Here!");
     return std::make_tuple(dL_dmeans2D, dL_dcolors, dL_ddepths, dL_dopacity, dL_dmeans3D, dL_dcov3D, dL_dsh, dL_dscales, dL_drotations);
 }
 
