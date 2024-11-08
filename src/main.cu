@@ -4,6 +4,7 @@
 #include "loss_utils.cuh"
 #include "parameters.cuh"
 #include "render_utils.cuh"
+#include "point_cloud.cuh"
 #include "scene.cuh"
 #include <args.hxx>
 #include <c10/cuda/CUDACachingAllocator.h>
@@ -183,6 +184,30 @@ cv::Mat tensor_to_mat(const torch::Tensor& tensor) {
     return mat;
 }
 
+torch::Tensor mat_to_tensor(const cv::Mat& mat, bool use_cuda = true) {
+    // Determine the number of channels
+    int channels = mat.channels();
+
+    // Set tensor shape
+    std::vector<int64_t> dims = {1, mat.rows, mat.cols, channels};
+    torch::TensorOptions options = torch::TensorOptions()
+                                    .dtype(torch::kUInt8) // OpenCV uses uint8 by default for images
+                                    .device(torch::kCPU); // Initialize as CPU tensor
+
+    // Create tensor and copy data
+    torch::Tensor tensor = torch::from_blob(mat.data, dims, options);
+
+    // Convert tensor to [C, H, W] format and normalize to float32 for further processing
+    tensor = tensor.permute({0, 3, 1, 2}).to(torch::kFloat32) / 255.0;
+
+    // Move to CUDA if specified and available
+    // if (use_cuda && torch::cuda::is_available()) {
+    //     tensor = tensor.to(torch::kCUDA);
+    // }
+
+    return tensor.clone(); // Clone to ensure it owns its own memory
+}
+
 int main(int argc, char* argv[]) {
     std::vector<std::string> args;
     args.reserve(argc);
@@ -192,16 +217,78 @@ int main(int argc, char* argv[]) {
     }
     // TODO: read parameters from JSON file or command line
     auto modelParams = gs::param::ModelParameters();
-    auto optimParams = gs::param::read_optim_params_from_json();\
+    auto optimParams = gs::param::read_optim_params_from_json();
     // Command Line
     if (parse_cmd_line_args(args, modelParams, optimParams) < 0) {
         return -1;
     };
     Write_model_parameters_to_file(modelParams);
 
-    auto gaussians = GaussianModel(modelParams.sh_degree);//Create Gaussian
-    auto scene = Scene(gaussians, modelParams);//Initialize Gaussians with scene(image)
-    gaussians.Training_setup(optimParams);//Set Training
+    int N = 79;
+    std::vector<cv::Mat> colorImgs, depthImgs;
+    std::vector<Eigen::Isometry3d> poses;
+
+    // Michael: Read TUM for test
+    std::ifstream fin("/home/michael/PCLtest/associations.txt");
+    if (!fin) {
+        std::cerr << "Cannot find pose file" << std::endl;
+        return 1;
+    }
+
+    for (int i = 0; i < N; i++) {
+        std::string data[12];
+        for (int j = 0; j < 12; j++) {
+            fin >> data[j];
+        }
+        colorImgs.push_back(cv::imread("/home/michael/Documents/rgbd_dataset_freiburg1_xyz/" + data[1]));
+        depthImgs.push_back(cv::imread("/home/michael/Documents/rgbd_dataset_freiburg1_xyz/" + data[3], -1)); // Reading Raw (-1)
+
+        double double_data[7];
+        for (int j = 5; j < 12; j++)
+            double_data[j - 5] = std::atof(data[j].c_str());
+
+        Eigen::Quaterniond q(double_data[6], double_data[3], double_data[4], double_data[5]);
+        Eigen::Isometry3d T(q);
+        T.pretranslate(Eigen::Vector3d(double_data[0], double_data[1], double_data[2]));
+        poses.push_back(T);
+    }
+
+    cv::Mat color1 = colorImgs[0];
+    cv::Mat depth1 = depthImgs[0];
+    Eigen::Isometry3d T = poses[0];
+    double cx = 318.6;
+    double cy = 255.3;
+    double fx = 517.3;
+    double fy = 516.5;
+    double depthScale = 5000.0;
+    int ic = 0;
+    PointCloud p;
+
+    for (int v = 0; v < color1.rows; v++) {
+        for (int u = 0; u < color1.cols; u++) {
+            unsigned int d = depth1.ptr<unsigned short>(v)[u]; // Depth
+            if (d == 0) continue; // Not observed
+            Eigen::Vector3d point;
+            point[2] = double(d) / depthScale;
+            point[0] = (u - cx) * point[2] / fx; // Camera Position
+            point[1] = (v - cy) * point[2] / fy;
+            Eigen::Vector3d pointWorld = T * point; // World Position
+
+            // vertices
+            p._points[ic].x = pointWorld[0];
+            p._points[ic].y = pointWorld[1];
+            p._points[ic].z = pointWorld[2];
+
+            // colors
+            p._colors[ic].r = color1.data[v * color1.step + u * color1.channels() + 2];
+            p._colors[ic].g = color1.data[v * color1.step + u * color1.channels() + 1];
+            p._colors[ic].b = color1.data[v * color1.step + u * color1.channels()];
+
+            ic++;
+        }
+    }
+
+    torch::Tensor tensor_w2c = torch::from_blob(poses[0].data(), {poses[0].rows(), poses[0].cols()}, torch::kFloat).clone();
 
     // Check if CUDA is available
     if (!torch::cuda::is_available()) {
@@ -213,11 +300,10 @@ int main(int argc, char* argv[]) {
     auto background = modelParams.white_background ? torch::tensor({1.f, 1.f, 1.f}) : torch::tensor({0.f, 0.f, 0.f}, pointType).to(torch::kCUDA);
 
     //Create Conv Window for SSIM Loss
-    const int window_size = 11;
-    const int channel = 3;
-    const auto conv_window = gaussian_splatting::create_window(window_size, channel).to(torch::kFloat32).to(torch::kCUDA, true);
-
-    const int camera_count = scene.Get_camera_count();
+    // const int window_size = 11;
+    // const int channel = 3;
+    // const auto conv_window = gaussian_splatting::create_window(window_size, channel).to(torch::kFloat32).to(torch::kCUDA, true);
+    //const int camera_count = scene.Get_camera_count();
 
     std::vector<int> indices;
     int last_status_len = 0;
@@ -228,24 +314,35 @@ int main(int argc, char* argv[]) {
     float avg_converging_rate = 0.f;
 
     float psnr_value = 0.f;//Init PSNR
-    for (int iter = 1; iter < optimParams.iterations + 1; ++iter) {
-        if (indices.empty()) {
-            indices = get_random_indices(camera_count);
-        }
-        const int camera_index = indices.back();//Random index now
-        auto& cam = scene.Get_training_camera(camera_index);
-        auto gt_image = cam.Get_original_image().to(torch::kCUDA, true);
-        auto gt_depth = cam.Get_original_image().to(torch::kCUDA, true);
-        indices.pop_back(); //remove last element to iterate over all cameras randomly
+
+    //Michael: Modify here to init with TUM
+    auto gaussians = GaussianModel(modelParams.sh_degree);//Create Gaussian
+    auto scene = Scene(gaussians, p, modelParams);//Initialize Gaussians with sce(image)
+    gaussians.Training_setup(optimParams);//Set Training
+
+    //For single image: iterations=100 * 2 for init
+    int iterations = 200;
+
+    for (int iter = 1; iter < iterations + 1; ++iter) {
+        // if (indices.empty()) {
+        //     indices = get_random_indices(camera_count);
+        // }
+        // const int camera_index = indices.back();//Random index now
+        // auto& cam = scene.Get_training_camera(camera_index);
+        // auto gt_image = cam.Get_original_image().to(torch::kCUDA, true);
+        // auto gt_depth = cam.Get_original_image().to(torch::kCUDA, true);
+        // indices.pop_back(); //remove last element to iterate over all cameras randomly
 
         // Add sh_degree to 1000 _max_sh_degree
-        if (iter % 1000 == 0) {
-            gaussians.One_up_sh_degree();
-        }
+        // if (iter % 1000 == 0) {
+        //     gaussians.One_up_sh_degree();
+        // }
 
+        auto gt_image = mat_to_tensor(colorImgs[0]);
+        auto gt_depth = mat_to_tensor(depthImgs[0]);
         //Render
         //Michael: Rasterizer: depth, alpha: No need for cam info from input now, specified for TUM
-        auto [image, viewspace_point_tensor, visibility_filter, radii, depth, alpha] = render(gaussians, background);
+        auto [image, viewspace_point_tensor, visibility_filter, radii, depth, alpha] = render(gaussians, tensor_w2c, background);
 
         // Redifine Loss Here! 
         
@@ -258,13 +355,13 @@ int main(int argc, char* argv[]) {
         */
         
         auto l1color = gaussian_splatting::l1_loss(image, gt_image) /* *tracking_mask*/;
-        auto l1depth = gaussian_splatting::l1_loss(image, gt_depth) /* *tracking_mask*/;
+        auto l1depth = gaussian_splatting::l1_loss(depth, gt_depth) /* *tracking_mask*/;
         auto loss = 0.6 * l1color + 0.4 * l1depth;
         //auto ssim_loss = gaussian_splatting::ssim(image, gt_image, conv_window, window_size, channel);
         //auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - ssim_loss);
 
         // Update status line
-        //Output at command
+        // Output at command
         if (iter % 100 == 0) {
             auto cur_time = std::chrono::steady_clock::now();//Time end
             std::chrono::duration<double> time_elapsed = cur_time - start_time;
@@ -323,7 +420,7 @@ int main(int argc, char* argv[]) {
             }
 
             //Save
-            if (iter % 7'000 == 0) {
+            if (iter % 2'00 == 0) {
                 gaussians.Save_ply(modelParams.output_path, iter, false);
             }
 

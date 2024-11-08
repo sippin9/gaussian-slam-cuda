@@ -12,6 +12,7 @@
 
 inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> render(GaussianModel& gaussianModel,
                                                                                      torch::Tensor& bg_color,
+                                                                                     torch::Tensor& w2c,
                                                                                      float scaling_modifier = 1.0,
                                                                                      torch::Tensor override_color = torch::empty({})) {
     // Ensure background tensor (bg_color) is on GPU!
@@ -27,7 +28,6 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, to
     float far = 100;
 
     // Should get param from model for SLAM
-    auto w2c = torch::eye(4);
     auto w2c_cuda = w2c.to(torch::kCUDA).to(torch::kFloat);
     auto cam_center = torch::inverse(w2c_cuda).slice(/*dim=*/0, /*start=*/3, /*end=*/4);
     auto viewmatrix = w2c_cuda.transpose(0, 1);
