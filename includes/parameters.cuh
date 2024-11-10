@@ -32,7 +32,7 @@ namespace gs {
         struct ModelParameters {
             int sh_degree = 3;
             std::filesystem::path source_path = "";
-            std::filesystem::path output_path = "output";
+            std::filesystem::path output_path = "/home/michael/Documents/outputGS/Init";
             std::string images = "images";
             int resolution = -1;
             bool white_background = false;

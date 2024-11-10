@@ -282,7 +282,7 @@ std::vector<std::string> GaussianModel::construct_list_of_attributes() {
 
 void GaussianModel::Save_ply(const std::filesystem::path& file_path, int iteration, bool isLastIteration) {
     std::cout << "Saving at " << std::to_string(iteration) << " iterations\n";
-    auto folder = file_path / ("point_cloud/iteration_" + std::to_string(iteration));
+    auto folder = file_path /*/ ("point_cloud/iteration_" + std::to_string(iteration))*/;
     std::filesystem::create_directories(folder);
 
     auto xyz = _xyz.cpu().contiguous();
@@ -302,7 +302,7 @@ void GaussianModel::Save_ply(const std::filesystem::path& file_path, int iterati
                                                     rotation.clone()};
     auto attributes = construct_list_of_attributes();
     std::thread t = std::thread([folder, tensor_attributes, attributes]() {
-        Write_output_ply(folder / "point_cloud.ply", tensor_attributes, attributes);
+        Write_output_ply(folder / "tum.ply", tensor_attributes, attributes);
     });
 
     if (isLastIteration) {

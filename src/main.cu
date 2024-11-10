@@ -268,21 +268,25 @@ int main(int argc, char* argv[]) {
         for (int u = 0; u < color1.cols; u++) {
             unsigned int d = depth1.ptr<unsigned short>(v)[u]; // Depth
             if (d == 0) continue; // Not observed
-            Eigen::Vector3d point;
-            point[2] = double(d) / depthScale;
-            point[0] = (u - cx) * point[2] / fx; // Camera Position
-            point[1] = (v - cy) * point[2] / fy;
-            Eigen::Vector3d pointWorld = T * point; // World Position
+            Eigen::Vector3d pointo;
+            pointo[2] = double(d) / depthScale;
+            pointo[0] = (u - cx) * pointo[2] / fx; // Camera Position
+            pointo[1] = (v - cy) * pointo[2] / fy;
+            Eigen::Vector3d pointWorld = T * pointo; // World Position
 
-            // vertices
-            p._points[ic].x = pointWorld[0];
-            p._points[ic].y = pointWorld[1];
-            p._points[ic].z = pointWorld[2];
+            // Create a Point and Color instance, populate, and push back to PointCloud
+            Point point;
+            point.x = pointWorld[0];
+            point.y = pointWorld[1];
+            point.z = pointWorld[2];
+            p._points.push_back(point);  // Push the point into the _points vector
 
-            // colors
-            p._colors[ic].r = color1.data[v * color1.step + u * color1.channels() + 2];
-            p._colors[ic].g = color1.data[v * color1.step + u * color1.channels() + 1];
-            p._colors[ic].b = color1.data[v * color1.step + u * color1.channels()];
+            // Create a Color instance, populate, and push back to PointCloud
+            Color color;
+            color.r = color1.data[v * color1.step + u * color1.channels() + 2];
+            color.g = color1.data[v * color1.step + u * color1.channels() + 1];
+            color.b = color1.data[v * color1.step + u * color1.channels()];
+            p._colors.push_back(color);  // Push the color into the _colors vector
 
             ic++;
         }
@@ -305,171 +309,173 @@ int main(int argc, char* argv[]) {
     // const auto conv_window = gaussian_splatting::create_window(window_size, channel).to(torch::kFloat32).to(torch::kCUDA, true);
     //const int camera_count = scene.Get_camera_count();
 
-    std::vector<int> indices;
-    int last_status_len = 0;
-    auto start_time = std::chrono::steady_clock::now();//Time start
-    float loss_add = 0.f;
+    // std::vector<int> indices;
+    // int last_status_len = 0;
+    // auto start_time = std::chrono::steady_clock::now();//Time start
+    // float loss_add = 0.f;
 
-    LossMonitor loss_monitor(200);//buffersize=200
-    float avg_converging_rate = 0.f;
+    // LossMonitor loss_monitor(200);//buffersize=200
+    // float avg_converging_rate = 0.f;
 
-    float psnr_value = 0.f;//Init PSNR
+    // float psnr_value = 0.f;//Init PSNR
 
     //Michael: Modify here to init with TUM
     auto gaussians = GaussianModel(modelParams.sh_degree);//Create Gaussian
     auto scene = Scene(gaussians, p, modelParams);//Initialize Gaussians with sce(image)
     gaussians.Training_setup(optimParams);//Set Training
 
+    gaussians.Save_ply(modelParams.output_path, 0, true);
+    
     //For single image: iterations=100 * 2 for init
-    int iterations = 200;
+    // int iterations = 200;
 
-    for (int iter = 1; iter < iterations + 1; ++iter) {
-        // if (indices.empty()) {
-        //     indices = get_random_indices(camera_count);
-        // }
-        // const int camera_index = indices.back();//Random index now
-        // auto& cam = scene.Get_training_camera(camera_index);
-        // auto gt_image = cam.Get_original_image().to(torch::kCUDA, true);
-        // auto gt_depth = cam.Get_original_image().to(torch::kCUDA, true);
-        // indices.pop_back(); //remove last element to iterate over all cameras randomly
+    // for (int iter = 1; iter < iterations + 1; ++iter) {
+    //     // if (indices.empty()) {
+    //     //     indices = get_random_indices(camera_count);
+    //     // }
+    //     // const int camera_index = indices.back();//Random index now
+    //     // auto& cam = scene.Get_training_camera(camera_index);
+    //     // auto gt_image = cam.Get_original_image().to(torch::kCUDA, true);
+    //     // auto gt_depth = cam.Get_original_image().to(torch::kCUDA, true);
+    //     // indices.pop_back(); //remove last element to iterate over all cameras randomly
 
-        // Add sh_degree to 1000 _max_sh_degree
-        // if (iter % 1000 == 0) {
-        //     gaussians.One_up_sh_degree();
-        // }
+    //     // Add sh_degree to 1000 _max_sh_degree
+    //     // if (iter % 1000 == 0) {
+    //     //     gaussians.One_up_sh_degree();
+    //     // }
 
-        auto gt_image = mat_to_tensor(colorImgs[0]);
-        auto gt_depth = mat_to_tensor(depthImgs[0]);
-        //Render
-        //Michael: Rasterizer: depth, alpha: No need for cam info from input now, specified for TUM
-        auto [image, viewspace_point_tensor, visibility_filter, radii, depth, alpha] = render(gaussians, tensor_w2c, background);
+    //     auto gt_image = mat_to_tensor(colorImgs[0]);
+    //     auto gt_depth = mat_to_tensor(depthImgs[0]);
+    //     //Render
+    //     //Michael: Rasterizer: depth, alpha: No need for cam info from input now, specified for TUM
+    //     auto [image, viewspace_point_tensor, visibility_filter, radii, depth, alpha] = render(gaussians, tensor_w2c, background);
 
-        // Redifine Loss Here! 
+    //     // Redifine Loss Here! 
         
-        /*
-        auto tracking_mask = torch::ones({alpha.size(0),alpha.size(1)});
-        torch::Tensor depth_mask = gt_depth > 0.0; 
-        torch::Tensor alpha_mask = alpha > 0.0; 
-        tracking_mask &= depth_mask;
-        tracking_mask &= alpha_mask;
-        */
+    //     /*
+    //     auto tracking_mask = torch::ones({alpha.size(0),alpha.size(1)});
+    //     torch::Tensor depth_mask = gt_depth > 0.0; 
+    //     torch::Tensor alpha_mask = alpha > 0.0; 
+    //     tracking_mask &= depth_mask;
+    //     tracking_mask &= alpha_mask;
+    //     */
         
-        auto l1color = gaussian_splatting::l1_loss(image, gt_image) /* *tracking_mask*/;
-        auto l1depth = gaussian_splatting::l1_loss(depth, gt_depth) /* *tracking_mask*/;
-        auto loss = 0.6 * l1color + 0.4 * l1depth;
-        //auto ssim_loss = gaussian_splatting::ssim(image, gt_image, conv_window, window_size, channel);
-        //auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - ssim_loss);
+    //     auto l1color = gaussian_splatting::l1_loss(image, gt_image) /* *tracking_mask*/;
+    //     auto l1depth = gaussian_splatting::l1_loss(depth, gt_depth) /* *tracking_mask*/;
+    //     auto loss = 0.6 * l1color + 0.4 * l1depth;
+    //     //auto ssim_loss = gaussian_splatting::ssim(image, gt_image, conv_window, window_size, channel);
+    //     //auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - ssim_loss);
 
-        // Update status line
-        // Output at command
-        if (iter % 100 == 0) {
-            auto cur_time = std::chrono::steady_clock::now();//Time end
-            std::chrono::duration<double> time_elapsed = cur_time - start_time;
-            // XXX shouldn't have to create a new stringstream, but resetting takes multiple calls
-            std::stringstream status_line;
-            // XXX Use thousand separators, but doesn't work for some reason
-            status_line.imbue(std::locale(""));//Format in Timezone
-            status_line
-                << "\rIter: " << std::setw(6) << iter
-                << "  Loss: " << std::fixed << std::setw(9) << std::setprecision(6) << loss.item<float>();
-            if (optimParams.early_stopping) {
-                status_line
-                    << "  ACR: " << std::fixed << std::setw(9) << std::setprecision(6) << avg_converging_rate;
-            }
-            status_line
-                << "  Splats: " << std::setw(10) << (int)gaussians.Get_xyz().size(0)
-                << "  Time: " << std::fixed << std::setw(8) << std::setprecision(3) << time_elapsed.count() << "s"
-                << "  Avg iter/s: " << std::fixed << std::setw(5) << std::setprecision(1) << 1.0 * iter / time_elapsed.count()
-                << "  " // Some extra whitespace, in case a "Pruning ... points" message gets printed after
-                ;
-            const int curlen = status_line.str().length();
-            const int ws = last_status_len - curlen;
-            if (ws > 0)
-                status_line << std::string(ws, ' ');
-            std::cout << status_line.str() << std::flush;
-            last_status_len = curlen;
-        }
+    //     // Update status line
+    //     // Output at command
+    //     if (iter % 100 == 0) {
+    //         auto cur_time = std::chrono::steady_clock::now();//Time end
+    //         std::chrono::duration<double> time_elapsed = cur_time - start_time;
+    //         // XXX shouldn't have to create a new stringstream, but resetting takes multiple calls
+    //         std::stringstream status_line;
+    //         // XXX Use thousand separators, but doesn't work for some reason
+    //         status_line.imbue(std::locale(""));//Format in Timezone
+    //         status_line
+    //             << "\rIter: " << std::setw(6) << iter
+    //             << "  Loss: " << std::fixed << std::setw(9) << std::setprecision(6) << loss.item<float>();
+    //         if (optimParams.early_stopping) {
+    //             status_line
+    //                 << "  ACR: " << std::fixed << std::setw(9) << std::setprecision(6) << avg_converging_rate;
+    //         }
+    //         status_line
+    //             << "  Splats: " << std::setw(10) << (int)gaussians.Get_xyz().size(0)
+    //             << "  Time: " << std::fixed << std::setw(8) << std::setprecision(3) << time_elapsed.count() << "s"
+    //             << "  Avg iter/s: " << std::fixed << std::setw(5) << std::setprecision(1) << 1.0 * iter / time_elapsed.count()
+    //             << "  " // Some extra whitespace, in case a "Pruning ... points" message gets printed after
+    //             ;
+    //         const int curlen = status_line.str().length();
+    //         const int ws = last_status_len - curlen;
+    //         if (ws > 0)
+    //             status_line << std::string(ws, ' ');
+    //         std::cout << status_line.str() << std::flush;
+    //         last_status_len = curlen;
+    //     }
 
-        if (optimParams.early_stopping) {
-            avg_converging_rate = loss_monitor.Update(loss.item<float>());
-        }
-        loss_add += loss.item<float>();
+    //     if (optimParams.early_stopping) {
+    //         avg_converging_rate = loss_monitor.Update(loss.item<float>());
+    //     }
+    //     loss_add += loss.item<float>();
 
-        loss.backward();//Backward here
+    //     loss.backward();//Backward here
 
-        {//Update param
-            torch::NoGradGuard no_grad;
-            auto visible_max_radii = gaussians._max_radii2D.masked_select(visibility_filter);
-            auto visible_radii = radii.masked_select(visibility_filter);
-            auto max_radii = torch::max(visible_max_radii, visible_radii);
-            gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);//Update _max_radii2D
+    //     {//Update param
+    //         torch::NoGradGuard no_grad;
+    //         auto visible_max_radii = gaussians._max_radii2D.masked_select(visibility_filter);
+    //         auto visible_radii = radii.masked_select(visibility_filter);
+    //         auto max_radii = torch::max(visible_max_radii, visible_radii);
+    //         gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);//Update _max_radii2D
 
-            //Save and Calc PSNR
-            if (iter == optimParams.iterations) {
-                std::cout << std::endl;
-                gaussians.Save_ply(modelParams.output_path, iter, true);
-                psnr_value = psnr_metric(image, gt_image);
-                //Save Image
-                cv::Mat render_image = tensor_to_mat(image);
-                cv::Mat gt_image_mat = tensor_to_mat(gt_image);
-                cv::imshow("img for 3dgs", render_image);
-                cv::imshow("gt img", gt_image_mat);
-                // cv::waitKey(1); 
-                cv::waitKey(0); 
-                break;
-            }
+    //         //Save and Calc PSNR
+    //         if (iter == optimParams.iterations) {
+    //             std::cout << std::endl;
+    //             gaussians.Save_ply(modelParams.output_path, iter, true);
+    //             psnr_value = psnr_metric(image, gt_image);
+    //             //Save Image
+    //             cv::Mat render_image = tensor_to_mat(image);
+    //             cv::Mat gt_image_mat = tensor_to_mat(gt_image);
+    //             cv::imshow("img for 3dgs", render_image);
+    //             cv::imshow("gt img", gt_image_mat);
+    //             // cv::waitKey(1); 
+    //             cv::waitKey(0); 
+    //             break;
+    //         }
 
-            //Save
-            if (iter % 2'00 == 0) {
-                gaussians.Save_ply(modelParams.output_path, iter, false);
-            }
+    //         //Save
+    //         if (iter % 2'00 == 0) {
+    //             gaussians.Save_ply(modelParams.output_path, iter, false);
+    //         }
 
-            // Densification
-            if (iter < optimParams.densify_until_iter) {
-                gaussians.Add_densification_stats(viewspace_point_tensor, visibility_filter);
-                if (iter > optimParams.densify_from_iter && iter % optimParams.densification_interval == 0) 
-                {
-                    // @TODO: Not sure about type
-                    float size_threshold = iter > optimParams.opacity_reset_interval ? 20.f : -1.f;
-                    gaussians.Densify_and_prune(optimParams.densify_grad_threshold, optimParams.min_opacity, scene.Get_cameras_extent(), size_threshold);
-                }
+    //         // Densification
+    //         if (iter < optimParams.densify_until_iter) {
+    //             gaussians.Add_densification_stats(viewspace_point_tensor, visibility_filter);
+    //             if (iter > optimParams.densify_from_iter && iter % optimParams.densification_interval == 0) 
+    //             {
+    //                 // @TODO: Not sure about type
+    //                 float size_threshold = iter > optimParams.opacity_reset_interval ? 20.f : -1.f;
+    //                 gaussians.Densify_and_prune(optimParams.densify_grad_threshold, optimParams.min_opacity, scene.Get_cameras_extent(), size_threshold);
+    //             }
 
-                if (iter % optimParams.opacity_reset_interval == 0 || (modelParams.white_background && iter == optimParams.densify_from_iter)) {
-                    gaussians.Reset_opacity();
-                }
-            }
+    //             if (iter % optimParams.opacity_reset_interval == 0 || (modelParams.white_background && iter == optimParams.densify_from_iter)) {
+    //                 gaussians.Reset_opacity();
+    //             }
+    //         }
 
-            if (iter >= optimParams.densify_until_iter && loss_monitor.IsConverging(optimParams.convergence_threshold)) {
-                std::cout << "Converged after " << iter << " iterations!" << std::endl;
-                gaussians.Save_ply(modelParams.output_path, iter, true);
-                break;
-            }
+    //         if (iter >= optimParams.densify_until_iter && loss_monitor.IsConverging(optimParams.convergence_threshold)) {
+    //             std::cout << "Converged after " << iter << " iterations!" << std::endl;
+    //             gaussians.Save_ply(modelParams.output_path, iter, true);
+    //             break;
+    //         }
 
-            //  Optimizer step
-            if (iter < optimParams.iterations) {
-                gaussians._optimizer->step();
-                gaussians._optimizer->zero_grad(true);
-                // @TODO: Not sure about type
-                gaussians.Update_learning_rate(iter);
-            }
+    //         //  Optimizer step
+    //         if (iter < optimParams.iterations) {
+    //             gaussians._optimizer->step();
+    //             gaussians._optimizer->zero_grad(true);
+    //             // @TODO: Not sure about type
+    //             gaussians.Update_learning_rate(iter);
+    //         }
 
-            if (optimParams.empty_gpu_cache && iter % 100) {
-                c10::cuda::CUDACachingAllocator::emptyCache();
-            }
-        }
-    }
+    //         if (optimParams.empty_gpu_cache && iter % 100) {
+    //             c10::cuda::CUDACachingAllocator::emptyCache();
+    //         }
+    //     }
+    // }
 
-    auto cur_time = std::chrono::steady_clock::now();
-    std::chrono::duration<double> time_elapsed = cur_time - start_time;//Time Used in Total
+    // auto cur_time = std::chrono::steady_clock::now();
+    // std::chrono::duration<double> time_elapsed = cur_time - start_time;//Time Used in Total
 
-    std::cout << std::endl
-              << "The training of the 3DGS is done in "
-              << std::fixed << std::setw(7) << std::setprecision(3) << time_elapsed.count() << "sec, avg "
-              << std::fixed << std::setw(4) << std::setprecision(1) << 1.0 * optimParams.iterations / time_elapsed.count() << " iter/sec, "
-              << gaussians.Get_xyz().size(0) << " splats, "
-              << std::fixed << std::setw(7) << std::setprecision(6) << " psrn: " << psnr_value << std::endl
-              << std::endl
-              << std::endl;
-
+    // std::cout << std::endl
+    //           << "The training of the 3DGS is done in "
+    //           << std::fixed << std::setw(7) << std::setprecision(3) << time_elapsed.count() << "sec, avg "
+    //           << std::fixed << std::setw(4) << std::setprecision(1) << 1.0 * optimParams.iterations / time_elapsed.count() << " iter/sec, "
+    //           << gaussians.Get_xyz().size(0) << " splats, "
+    //           << std::fixed << std::setw(7) << std::setprecision(6) << " psrn: " << psnr_value << std::endl
+    //           << std::endl
+    //           << std::endl;
+    
     return 0;
 }
